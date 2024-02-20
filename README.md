@@ -1,5 +1,39 @@
 # README
-Google solution challenge project
+git add README.md
+git commit -m "Add project information to README.md"
+git push origin main
+# CalCalator
+
+CalCalator is a smartwatch application designed to help users monitor their calorie consumption using a blood sugar monitor. It utilizes the Google Cloud Health API to retrieve data on calories consumed and blood sugar levels. The application employs Gemini AI to create an algorithm that links the two datasets for accurate calorie tracking.
+
+## Technologies Used
+- Flutter
+- Firebase (Firestore)
+- Google Cloud Health API
+- Gemini AI
+
+## Features
+- Integration with blood sugar monitor for real-time measurement.
+- Utilization of Google Cloud Health API for retrieving calorie consumption and blood sugar level data.
+- Implementation of Gemini AI algorithm for correlating blood sugar levels with calorie consumption.
+- Storage of user data using Firebase Firestore.
+
+## Installation
+To install and run the CalCalator application locally, follow these steps:
+
+1. Clone this repository: `git clone https://github.com/your-username/CalCalator.git`
+2. Navigate to the project directory: `cd CalCalator`
+3. Run `flutter pub get` to install dependencies.
+4. Ensure you have a Firebase project set up and configured with Firestore.
+5. Run the application on your preferred device/emulator: `flutter run`
+
+## Usage
+- Open the CalCalator application on your smartwatch.
+- Connect the blood sugar monitor to the app for real-time measurement.
+- The app will display your calorie consumption based on the blood sugar levels retrieved from the monitor and Google Cloud Health API.
+
+
+Code :
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
