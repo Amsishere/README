@@ -1,0 +1,322 @@
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(helmet());
+app.use(morgan('dev'));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+app.use(limiter);
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('MongoDB connected');
+    app.listen(5000, () => console.log('Server running on port 5000'));
+  })
+  .catch(err => console.log(err));
+
+// ======= MODELS =======
+const { Schema, model } = mongoose;
+
+const userSchema = new Schema({
+  username: { type: String, unique: true },
+  email: String,
+  password: String,
+  role: { type: String, enum: ['buyer', 'seller'], default: 'buyer' },
+  bio: String,
+  rating: { type: Number, default: 0 },
+});
+
+const gigSchema = new Schema({
+  title: String,
+  description: String,
+  price: Number,
+  seller: { type: Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const orderSchema = new Schema({
+  gig: { type: Schema.Types.ObjectId, ref: 'Gig' },
+  buyer: { type: Schema.Types.ObjectId, ref: 'User' },
+  seller: { type: Schema.Types.ObjectId, ref: 'User' },
+  status: { type: String, enum: ['pending', 'in_progress', 'delivered'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const reviewSchema = new Schema({
+  gig: { type: Schema.Types.ObjectId, ref: 'Gig' },
+  user: { type: Schema.Types.ObjectId, ref: 'User' },
+  rating: Number,
+  comment: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const User = model('User', userSchema);
+const Gig = model('Gig', gigSchema);
+const Order = model('Order', orderSchema);
+const Review = model('Review', reviewSchema);
+
+// ======= MIDDLEWARE =======
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+
+// ======= ROUTES =======
+// Auth
+app.post('/api/auth/register', async (req, res) => {
+  const { username, email, password, role } = req.body;
+  const hashed = await bcrypt.hash(password, 10);
+  const user = new User({ username, email, password: hashed, role });
+  await user.save();
+  res.status(201).json({ message: 'User registered' });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
+  res.json({ token });
+});
+
+// Gigs
+app.post('/api/gigs', authMiddleware, async (req, res) => {
+  const gig = new Gig({ ...req.body, seller: req.user.id });
+  await gig.save();
+  res.status(201).json(gig);
+});
+
+app.get('/api/gigs', async (req, res) => {
+  const gigs = await Gig.find().populate('seller', 'username');
+  res.json(gigs);
+});
+
+// Orders
+app.post('/api/orders', authMiddleware, async (req, res) => {
+  const { gigId } = req.body;
+  const gig = await Gig.findById(gigId);
+  const order = new Order({
+    gig: gigId,
+    buyer: req.user.id,
+    seller: gig.seller,
+    status: 'pending'
+  });
+  await order.save();
+  res.status(201).json(order);
+});
+
+app.get('/api/orders', authMiddleware, async (req, res) => {
+  const orders = await Order.find({ $or: [{ buyer: req.user.id }, { seller: req.user.id }] })
+    .populate('gig', 'title')
+    .populate('buyer', 'username')
+    .populate('seller', 'username');
+  res.json(orders);
+});
+
+// Reviews
+app.post('/api/reviews', authMiddleware, async (req, res) => {
+  const { gigId, rating, comment } = req.body;
+  const review = new Review({
+    gig: gigId,
+    user: req.user.id,
+    rating,
+    comment
+  });
+  await review.save();
+  res.status(201).json(review);
+});
+
+app.get('/api/reviews/:gigId', async (req, res) => {
+  const reviews = await Review.find({ gig: req.params.gigId }).populate('user', 'username');
+  res.json(reviews);
+});
+
+// User profile
+app.get('/api/profile', authMiddleware, async (req, res) => {
+  const user = await User.findById(req.user.id).select('-password');
+  res.json(user);
+});
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(helmet());
+app.use(morgan('dev'));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+app.use(limiter);
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('MongoDB connected');
+    app.listen(5000, () => console.log('Server running on port 5000'));
+  })
+  .catch(err => console.log(err));
+
+// ======= MODELS =======
+const { Schema, model } = mongoose;
+
+const userSchema = new Schema({
+  username: { type: String, unique: true },
+  email: String,
+  password: String,
+  role: { type: String, enum: ['buyer', 'seller'], default: 'buyer' },
+  bio: String,
+  rating: { type: Number, default: 0 },
+});
+
+const gigSchema = new Schema({
+  title: String,
+  description: String,
+  price: Number,
+  seller: { type: Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const orderSchema = new Schema({
+  gig: { type: Schema.Types.ObjectId, ref: 'Gig' },
+  buyer: { type: Schema.Types.ObjectId, ref: 'User' },
+  seller: { type: Schema.Types.ObjectId, ref: 'User' },
+  status: { type: String, enum: ['pending', 'in_progress', 'delivered'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const reviewSchema = new Schema({
+  gig: { type: Schema.Types.ObjectId, ref: 'Gig' },
+  user: { type: Schema.Types.ObjectId, ref: 'User' },
+  rating: Number,
+  comment: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const User = model('User', userSchema);
+const Gig = model('Gig', gigSchema);
+const Order = model('Order', orderSchema);
+const Review = model('Review', reviewSchema);
+
+// ======= MIDDLEWARE =======
+const authMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+
+// ======= ROUTES =======
+// Auth
+app.post('/api/auth/register', async (req, res) => {
+  const { username, email, password, role } = req.body;
+  const hashed = await bcrypt.hash(password, 10);
+  const user = new User({ username, email, password: hashed, role });
+  await user.save();
+  res.status(201).json({ message: 'User registered' });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
+  res.json({ token });
+});
+
+// Gigs
+app.post('/api/gigs', authMiddleware, async (req, res) => {
+  const gig = new Gig({ ...req.body, seller: req.user.id });
+  await gig.save();
+  res.status(201).json(gig);
+});
+
+app.get('/api/gigs', async (req, res) => {
+  const gigs = await Gig.find().populate('seller', 'username');
+  res.json(gigs);
+});
+
+// Orders
+app.post('/api/orders', authMiddleware, async (req, res) => {
+  const { gigId } = req.body;
+  const gig = await Gig.findById(gigId);
+  const order = new Order({
+    gig: gigId,
+    buyer: req.user.id,
+    seller: gig.seller,
+    status: 'pending'
+  });
+  await order.save();
+  res.status(201).json(order);
+});
+
+app.get('/api/orders', authMiddleware, async (req, res) => {
+  const orders = await Order.find({ $or: [{ buyer: req.user.id }, { seller: req.user.id }] })
+    .populate('gig', 'title')
+    .populate('buyer', 'username')
+    .populate('seller', 'username');
+  res.json(orders);
+});
+
+// Reviews
+app.post('/api/reviews', authMiddleware, async (req, res) => {
+  const { gigId, rating, comment } = req.body;
+  const review = new Review({
+    gig: gigId,
+    user: req.user.id,
+    rating,
+    comment
+  });
+  await review.save();
+  res.status(201).json(review);
+});
+
+app.get('/api/reviews/:gigId', async (req, res) => {
+  const reviews = await Review.find({ gig: req.params.gigId }).populate('user', 'username');
+  res.json(reviews);
+});
+
+// User profile
+app.get('/api/profile', authMiddleware, async (req, res) => {
+  const user = await User.findById(req.user.id).select('-password');
+  res.json(user);
+});
